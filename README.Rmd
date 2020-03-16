@@ -398,7 +398,7 @@ oncotree_gr %N>%
 
 And below is an example of the subdivisions of lung cancer.
 
-```{r, fig.width=7}
+```{r, fig.width=7, fig.height=8}
 oncotree_gr %N>%
     filter(name != "TISSUE") %>%
     morph(to_components) %>%
@@ -407,8 +407,10 @@ oncotree_gr %N>%
     filter(grp == "Lung") %>%
     ggraph(layout = "tree") +
     geom_edge_diagonal(color = "grey50") +
-    geom_node_label(aes(label = name, fill = color), 
+    geom_node_label(aes(label = name, fill = color), size = 3,
                     repel = FALSE, label.r = unit(0.1, "lines")) +
     scale_fill_identity() +
+    coord_flip() +
+    scale_y_reverse() +
     theme_graph()
 ```

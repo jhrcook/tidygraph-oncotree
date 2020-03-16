@@ -94,7 +94,7 @@ httr::headers(oncotree_res)
 ```
 
     #> $date
-    #> [1] "Mon, 16 Mar 2020 12:50:23 GMT"
+    #> [1] "Mon, 16 Mar 2020 12:59:33 GMT"
     #> 
     #> $server
     #> [1] "Apache/2.2.15 (CentOS) mod_jk/1.2.41 mod_ssl/2.2.15 OpenSSL/1.0.1e-fips"
@@ -263,11 +263,11 @@ node_list
     #> # A tibble: 5 x 2
     #>   name  values
     #>   <chr>  <dbl>
-    #> 1 A       0.96
-    #> 2 B       0.92
-    #> 3 C       0.68
-    #> 4 D       0.34
-    #> 5 E       0.5
+    #> 1 A      0.04 
+    #> 2 B      0.81 
+    #> 3 C      0.35 
+    #> 4 D      0.580
+    #> 5 E      0.97
 
 The edge list can be turned into a `tidygraph` object using the
 `as_tbl_graph()` function. I explicitly set the `directed` parameter
@@ -321,11 +321,11 @@ gr %N>%
     #> # Node Data: 5 x 2 (active)
     #>   name  values
     #>   <chr>  <dbl>
-    #> 1 A       0.96
-    #> 2 B       0.92
-    #> 3 C       0.68
-    #> 4 E       0.5 
-    #> 5 D       0.34
+    #> 1 A      0.04 
+    #> 2 B      0.81 
+    #> 3 C      0.35 
+    #> 4 E      0.97 
+    #> 5 D      0.580
     #> #
     #> # Edge Data: 6 x 2
     #>    from    to
@@ -649,9 +649,11 @@ oncotree_gr %N>%
     filter(grp == "Lung") %>%
     ggraph(layout = "tree") +
     geom_edge_diagonal(color = "grey50") +
-    geom_node_label(aes(label = name, fill = color), 
+    geom_node_label(aes(label = name, fill = color), size = 3,
                     repel = FALSE, label.r = unit(0.1, "lines")) +
     scale_fill_identity() +
+    coord_flip() +
+    scale_y_reverse() +
     theme_graph()
 ```
 
