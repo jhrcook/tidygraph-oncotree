@@ -1,32 +1,38 @@
 ## Introduction
 
-The OncoTree is a directed acyclic graph (DAG) of cancer subtypes
-maintained by one of the leading cancer research institutes, Memorial
-Sloan Kettering (MSK). For example, head and neck cancers can be further
-divided into seven cancers, including head and neck squamous cell
-carcinoma (HNSC). HNSC itself has six subtypes, too. This hierarchy can
-be represented in a DAG, as shown below.
+Cancers are often first classified by their tissue of origin, but there
+are several types of cancer for each tissue. Further, each of these can
+have several subdivisions. For example, head and neck cancers can be
+further divided into seven cancers, including head and neck squamous
+cell carcinoma (HNSC). HNSC itself has six subtypes, too. This hierarchy
+can be represented in a directed acyclic graph (DAG), as shown below.
 
 ![](./assets/oncotree_online_example.png)
 
-For one of the projects in lab, I am dealing with many types of cancers
-from a variety of studies. Thus, I want to use OncoTree to organize the
-types and provide relational information of the cancers. For instance,
-depending on what I want to analyze, I may want the most specific
-subtype of cancer possible, or maybe I want the cancer grouped by their
-first level on the OncoTree (e.g. “Head and Neck”).
+The [OncoTree](http://oncotree.mskcc.org/#/home) is a DAG of cancer
+subtypes maintained by one of the leading cancer research institutes,
+[Memorial Sloan Kettering](https://www.mskcc.org) (MSK).
+
+For one of my projects in [lab](https://www.haigislab.org), I am dealing
+with many types of cancers from a variety of studies. Thus, I want to
+use OncoTree to organize the types and provide relational information of
+the cancers. For instance, depending on what I want to analyze, I may
+want the most specific subtype of cancer possible, or maybe I want the
+cancer grouped by their first level on the OncoTree (e.g. “Head and
+Neck”).
 
 Therefore, I decided to parse the OncoTree into a
 [‘tidygraph’](https://cran.r-project.org/web/packages/tidygraph/index.html),
 a “tidy” way to manage graph structures. The following is a tutorial on
-how I did this.
+how I did this. The GitHub repository for this analysis is available at
+[jhrcook/tidygraph-oncotree](https://github.com/jhrcook/tidygraph-oncotree).
 
 ## Setup
 
 I will load the packages ‘tidyverse’, ‘tidygraph’, and ‘ggraph’, and
 also use ‘httr’ and ‘jsonlite’, but call functions directly from their
 namespace. The ‘ggraph’ package is a “grammar of graphics” for graph
-structures - it is used for plotting graphs.
+structures - it is used for plotting graphs at the end of this tutorial.
 
 ``` r
 library(ggraph)
@@ -70,7 +76,7 @@ endpoint.
 
 We can use the package
 [‘httr’](https://cran.r-project.org/web/packages/httr/index.html) to
-set a “get” request to the OncoTree API. Checking the status code
+send a “get” request to the OncoTree API. Checking the status code
 indicates how the request went, 200 representing success.
 
 ``` r
@@ -80,15 +86,15 @@ oncotree_res$status_code
 
     #> [1] 200
 
-The request returns a list of lists containing data on the request, meta
-data, and the actual OncoTree data.
+The request returns a list of lists containing meta data on the request
+and the actual OncoTree data.
 
 ``` r
 httr::headers(oncotree_res)
 ```
 
     #> $date
-    #> [1] "Mon, 16 Mar 2020 12:10:16 GMT"
+    #> [1] "Mon, 16 Mar 2020 12:50:23 GMT"
     #> 
     #> $server
     #> [1] "Apache/2.2.15 (CentOS) mod_jk/1.2.41 mod_ssl/2.2.15 OpenSSL/1.0.1e-fips"
@@ -114,15 +120,15 @@ httr::headers(oncotree_res)
     #> attr(,"class")
     #> [1] "insensitive" "list"
 
-The OncoTree data is located in the `content` list of the response as a
-JSON. In case you want this data for other projects, the JSON can be
-written to file using the `write()` function.
+The OncoTree data is a JSON in the `content` list of the response. In
+case you want this data for other projects, the JSON can be written to
+file using the `write()` function.
 
 ``` r
 write(rawToChar(oncotree_res$content), file.path("oncotree.json"))
 ```
 
-## Parsing OncoTree JSON
+## Parsing the OncoTree JSON
 
 The OncoTree is organized as a highly nested list. To get insight into
 the structure we must turn the JSON into a list of lists so we can parse
@@ -168,9 +174,9 @@ oncotree_json$TISSUE$level
 
     #> [1] 0
 
-Almost all of the parts of `oncotree_json$TISSUE` contained information
+Almost all of the parts of `oncotree_json$TISSUE` contain information
 about the first level of the graph. The `children` section, though,
-contained all of the tissues that we can see on the OncoTree web
+contains all of the tissues that we can see on the OncoTree web
 application.
 
 ``` r
@@ -204,17 +210,18 @@ names(oncotree_json$TISSUE$children$HEAD_NECK$children)
 
     #> [1] "NPC"    "HNMUCM" "PTH"    "HNSC"   "OHNCA"  "SACA"   "SBL"
 
-Therefore, we can tell that the JSON is a nest list of the nodes in the
-DAG. And all we need to do is implement a graph-traversing function to
-extract all of the information. Since it is nested, this suggests we
-will need a recursive formula.
+Therefore, we can tell that the JSON is a nested list of the nodes in
+the DAG. And all we need to do is implement a graph-traversing function
+to extract all of the information. Since it is nested and we are
+building a graph, this strongly suggests we will need a recursive
+algorithm.
 
 ## Building the Tidygraph
 
-### Data needed for the Tidygraph
+### Data needed for the tidygraph
 
 To figure out what to do first, I often find it helpful to figure out
-what my output should look like. To make a Tidygraph, I will need an
+what my output should look like. To make a `tidygraph`, I will need an
 *edge list* and a *node list*. The first is a two-column table with
 names “from” and “to” populated by names of the nodes where each row
 indicates an edge of the graph. The node list is optional and contains
@@ -256,11 +263,11 @@ node_list
     #> # A tibble: 5 x 2
     #>   name  values
     #>   <chr>  <dbl>
-    #> 1 A       0.45
-    #> 2 B       0.22
-    #> 3 C       0.92
-    #> 4 D       0.26
-    #> 5 E       0.18
+    #> 1 A       0.96
+    #> 2 B       0.92
+    #> 3 C       0.68
+    #> 4 D       0.34
+    #> 5 E       0.5
 
 The edge list can be turned into a `tidygraph` object using the
 `as_tbl_graph()` function. I explicitly set the `directed` parameter
@@ -293,12 +300,13 @@ gr
     #> # … with 3 more rows
 
 To add the node information, I join the node list table by the “name”
-column. The `%N>%` infix activates the nodes of the `tidygraph` object
-so that the `full_join()` operates on the nodes and not the edges. I am
-not able to fully describe the ‘tidygraph’ API in this tutorial, but see
-vignettes by the creator, Thomas Pedersen
-(\[@thomasp85\](<https://twitter.com/thomasp85>)), for a good
-introduction: [Data Imaginist:
+column. The `%N>%` infix operates just like the ‘magrittr’ pipe `%>%`
+except it also activates the nodes of the `tidygraph` object so that the
+`full_join()` operates on the nodes and not the edges. I am not able to
+fully describe the ‘tidygraph’ API in this tutorial, but see vignettes
+by the creator, Thomas Pedersen
+([@thomasp85](https://twitter.com/thomasp85)), for a good introduction:
+[Data Imaginist -
 tidygraph](https://www.data-imaginist.com/tags/tidygraph).
 
 ``` r
@@ -313,11 +321,11 @@ gr %N>%
     #> # Node Data: 5 x 2 (active)
     #>   name  values
     #>   <chr>  <dbl>
-    #> 1 A       0.45
-    #> 2 B       0.22
-    #> 3 C       0.92
-    #> 4 E       0.18
-    #> 5 D       0.26
+    #> 1 A       0.96
+    #> 2 B       0.92
+    #> 3 C       0.68
+    #> 4 E       0.5 
+    #> 5 D       0.34
     #> #
     #> # Edge Data: 6 x 2
     #>    from    to
@@ -332,15 +340,15 @@ from the nested JSON.
 
 ### Extracting OncoTree from the JSON
 
-> Note: Below I am showing how to create the final product as if it was
-> a linear process - it in fact took me about and hour and a half of
+> Note: Below I demonstrate how to create the final algorithm as if it
+> was a linear process - it in fact took me about and hour and a half of
 > toying with the functions to get the desired result. If it is not easy
-> to grasp right away, it wasn’t for me either.
+> to grasp right away, don’t worry, it wasn’t for me either.
 
-So we know it will be recursive which means we will pass the first node
-to a function once and this function will call itself from within.
-Therefore, let’s create a function `add_children_to_dag()` that takes a
-node and an edge list and returns an edge list.
+So we know our algorithm will be recursive, which means we will pass the
+first node to a function once and this function will call itself from
+within. Therefore, let’s create a function `add_children_to_dag()` that
+takes a node and an edge list and returns an edge list.
 
 ``` r
 add_children_to_dag <- function(node, el) {
@@ -460,10 +468,10 @@ Great\! We can see that the connections from `"TISSUE"` to each of the
 top-level cancer groups were successfully added to the edge list.
 
 Now we need to apply this function to each of the children of this node.
-I do with with `map()` from the ‘purrr’ package (in ‘tidyverse’). It
-works similarly to `lapply()` from base R, but is a bit easier to
-manage, in my opinon (and it has some other useful helpers and
-capabilities that we don’t use here.)
+I do this with `map()` from the ‘purrr’ package (attached along with
+‘tidyverse’). It works similarly to `lapply()` from base R, but is a
+bit easier to manage, in my opinon (and it has some other useful helpers
+and capabilities that we don’t use here.)
 
 Basically, each child node is passed to `add_children_to_dag()` along
 with the edge list. The node information for each child will be
@@ -471,7 +479,7 @@ extracted and, if they have children, they will be sent through
 `add_children_to_dag()`, too. Each time, an edge list is returned.
 
 This is a recursive process and will naturally visit every node,
-building up the edge list every “leaf” on the tree.
+building up the edge list through every “leaf” on the tree.
 
 ``` r
 add_children_to_dag <- function(node, el) {
@@ -492,7 +500,7 @@ add_children_to_dag <- function(node, el) {
 }
 ```
 
-And that is it\! We should now be able to create the entire DAG.
+And that’s it\! We should now be able to create the entire DAG.
 
 ``` r
 # reset `NODE_INFO`
@@ -594,8 +602,12 @@ oncotree_gr <- oncotree_gr %N>%
 
 Finally, we can use the ‘ggraph’ package to create some visualizations
 of the DAG. Again, I am unable to fully explain ‘ggraph’ here, but the
-package vignettes are very good: [Data Imaginist:
-tidygraph](https://www.data-imaginist.com/tags/ggraph).
+package vignettes are very good: [Data Imaginist -
+ggraph](https://www.data-imaginist.com/tags/ggraph).
+
+The first plot below shows the OncoTree graph spreading radially from
+the center, each layer representing a further subdivision of the cancer
+type. The colors roughly correspond to the tissue of origin.
 
 ``` r
 oncotree_gr %N>%
@@ -607,6 +619,8 @@ oncotree_gr %N>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+
+Each of the subgraphs can also be separated by tissue of origin.
 
 ``` r
 oncotree_gr %N>%
@@ -623,3 +637,22 @@ oncotree_gr %N>%
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+And below is an example of the subdivisions of lung cancer.
+
+``` r
+oncotree_gr %N>%
+    filter(name != "TISSUE") %>%
+    morph(to_components) %>%
+    mutate(grp = tissue[which.max(level)]) %>%
+    unmorph() %N>%
+    filter(grp == "Lung") %>%
+    ggraph(layout = "tree") +
+    geom_edge_diagonal(color = "grey50") +
+    geom_node_label(aes(label = name, fill = color), 
+                    repel = FALSE, label.r = unit(0.1, "lines")) +
+    scale_fill_identity() +
+    theme_graph()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
